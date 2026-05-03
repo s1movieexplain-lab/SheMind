@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProgress(data) {
+      return data.keys().hasAll(['completedLessons', 'bookmarks', 'goals', 'streak']) &&
+             data.completedLessons is list &&
+             data.bookmarks is list &&
+             data.goals is list &&
+             data.streak is number;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProgress(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserProgress(request.resource.data) &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedLessons', 'bookmarks', 'goals', 'streak', 'lastActive']);
+    }
+  }
+}
